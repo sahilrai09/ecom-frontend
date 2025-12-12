@@ -1,71 +1,89 @@
-import axios from "../axios";
-import { useState, useEffect, createContext } from "react";
+// src/Context/Context.jsx
+import React, { createContext, useCallback, useEffect, useState } from "react";
+import API from "../axios"; // axios instance
 
 const AppContext = createContext({
   data: [],
-  isError: "",
+  isError: false,
   cart: [],
-  addToCart: (product) => {},
-  removeFromCart: (productId) => {},
-  refreshData:() =>{},
-  updateStockQuantity: (productId, newQuantity) =>{}
-  
+  addToCart: () => {},
+  removeFromCart: () => {},
+  refreshData: async () => {},
+  updateStockQuantity: () => {},
 });
 
 export const AppProvider = ({ children }) => {
   const [data, setData] = useState([]);
-  const [isError, setIsError] = useState("");
-  const [cart, setCart] = useState(JSON.parse(localStorage.getItem('cart')) || []);
-
-
-  const addToCart = (product) => {
-    const existingProductIndex = cart.findIndex((item) => item.id === product.id);
-    if (existingProductIndex !== -1) {
-      const updatedCart = cart.map((item, index) =>
-        index === existingProductIndex
-          ? { ...item, quantity: item.quantity + 1 }
-          : item
-      );
-      setCart(updatedCart);
-      localStorage.setItem('cart', JSON.stringify(updatedCart));
-    } else {
-      const updatedCart = [...cart, { ...product, quantity: 1 }];
-      setCart(updatedCart);
-      localStorage.setItem('cart', JSON.stringify(updatedCart));
-    }
-  };
-
-  const removeFromCart = (productId) => {
-    console.log("productID",productId)
-    const updatedCart = cart.filter((item) => item.id !== productId);
-    setCart(updatedCart);
-    localStorage.setItem('cart', JSON.stringify(updatedCart));
-    console.log("CART",cart)
-  };
-
-  const refreshData = async () => {
+  const [isError, setIsError] = useState(false);
+  const [cart, setCart] = useState(() => {
     try {
-      const response = await axios.get("/products");
-      setData(response.data);
-    } catch (error) {
-      setIsError(error.message);
+      const raw = localStorage.getItem("cart");
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
     }
-  };
+  });
 
-  const clearCart =() =>{
-    setCart([]);
-  }
-  
-  useEffect(() => {
-    refreshData();
+  // stable refreshData so callers always run the same function reference
+  const refreshData = useCallback(async () => {
+    try {
+      const response = await API.get("/products");
+      // debug log so you can see in the browser console what's returned
+      console.log("refreshData: /products response:", response?.data);
+      setData(Array.isArray(response.data) ? response.data : []);
+      setIsError(false);
+    } catch (err) {
+      console.error("refreshData error:", err);
+      setData([]);
+      setIsError(true);
+    }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('cart', JSON.stringify(cart));
+    // initial load
+    refreshData();
+  }, [refreshData]);
+
+  // persist cart whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem("cart", JSON.stringify(cart));
+    } catch (e) {
+      console.warn("Failed to persist cart:", e);
+    }
   }, [cart]);
-  
+
+  const addToCart = (product) => {
+    if (!product) return;
+    setCart((prev) => {
+      const existing = prev.find((p) => p.id === product.id);
+      if (existing) {
+        return prev.map((p) =>
+          p.id === product.id ? { ...p, quantity: (p.quantity || 1) + 1 } : p
+        );
+      }
+      return [...prev, { ...product, quantity: 1 }];
+    });
+  };
+
+  const removeFromCart = (productId) => {
+    setCart((prev) => prev.filter((p) => p.id !== productId));
+  };
+
+  const clearCart = () => setCart([]);
+
   return (
-    <AppContext.Provider value={{ data, isError, cart, addToCart, removeFromCart,refreshData, clearCart  }}>
+    <AppContext.Provider
+      value={{
+        data,
+        isError,
+        cart,
+        addToCart,
+        removeFromCart,
+        refreshData,
+        clearCart,
+      }}
+    >
       {children}
     </AppContext.Provider>
   );
