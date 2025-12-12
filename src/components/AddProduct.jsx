@@ -1,8 +1,13 @@
 // src/components/AddProduct.jsx
-import React, { useState } from "react";
+import React, { useState, useContext } from "react";
+import { useNavigate } from "react-router-dom";
 import API from "../axios";
+import AppContext from "../Context/Context";
 
 const AddProduct = () => {
+  const { refreshData } = useContext(AppContext);
+  const navigate = useNavigate();
+
   const [product, setProduct] = useState({
     name: "",
     brand: "",
@@ -17,7 +22,7 @@ const AddProduct = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setProduct({ ...product, [name]: value });
+    setProduct((p) => ({ ...p, [name]: value }));
   };
 
   const handleImageChange = (e) => {
@@ -29,22 +34,40 @@ const AddProduct = () => {
     try {
       const formData = new FormData();
       if (image) formData.append("imageFile", image);
+
+      // Ensure number fields are correct types (optional but safer)
+      const payload = {
+        ...product,
+        price: product.price === "" ? null : Number(product.price),
+        stockQuantity: product.stockQuantity === "" ? 0 : Number(product.stockQuantity),
+      };
+
       formData.append(
         "product",
-        new Blob([JSON.stringify(product)], { type: "application/json" })
+        new Blob([JSON.stringify(payload)], { type: "application/json" })
       );
 
+      // Do not set Content-Type header manually for multipart/form-data (axios will handle boundary)
       const response = await API.post("/product", formData, {
         headers: {
-          "Content-Type": "multipart/form-data",
+          Accept: "application/json",
         },
       });
 
       console.log("Product added successfully:", response.data);
-      alert("Product added successfully");
+      // refresh global product list so Home shows new product
+      if (typeof refreshData === "function") {
+        await refreshData();
+      } else {
+        // fallback: reload
+        window.location.reload();
+      }
+
+      // navigate back to home (optional)
+      navigate("/");
     } catch (error) {
       console.error("Error adding product:", error);
-      alert("Error adding product");
+      alert("Error adding product: " + (error?.response?.data || error.message));
     }
   };
 
@@ -100,7 +123,7 @@ const AddProduct = () => {
             <input
               type="number"
               className="form-control"
-              placeholder="Eg: $1000"
+              placeholder="Eg: 1000"
               onChange={handleInputChange}
               value={product.price}
               name="price"
