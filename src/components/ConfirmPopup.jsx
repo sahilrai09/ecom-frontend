@@ -19,4 +19,4 @@ const ConfirmPopup = ({ show, onClose, title = "Added to cart", message = "Item 
   );
 };
 
-export default ConfirmPopup;
+export default ConfirmPopup;  
